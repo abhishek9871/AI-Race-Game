@@ -75,21 +75,21 @@ func get_theme_params() -> Dictionary:
 		"Countryside":
 			return {
 				"ground_color": Color(0.36, 0.26, 0.18),
-				"obstacle_spacing": Vector2(240.0, 360.0),
-				"pickup_spacing": Vector2(300.0, 480.0),
-				"target_distance": 1800.0,
+				"obstacle_spacing": Vector2(230.0, 350.0),
+				"pickup_spacing": Vector2(280.0, 460.0),
+				"target_distance": 3000.0,
 			}
 		"Mountain":
 			return {
 				"ground_color": Color(0.30, 0.30, 0.35),
 				"obstacle_spacing": Vector2(200.0, 320.0),
 				"pickup_spacing": Vector2(320.0, 520.0),
-				"target_distance": 2000.0,
+				"target_distance": 3400.0,
 			}
 		_:
 			return {
 				"ground_color": Color(0.25, 0.25, 0.28),
-				"obstacle_spacing": Vector2(260.0, 380.0),
-				"pickup_spacing": Vector2(340.0, 520.0),
-				"target_distance": 1800.0,
+				"obstacle_spacing": Vector2(250.0, 370.0),
+				"pickup_spacing": Vector2(330.0, 500.0),
+				"target_distance": 2600.0,
 			}

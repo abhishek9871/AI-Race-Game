@@ -75,6 +75,9 @@ func _reset_game():
 	if ground_rect:
 		ground_rect.color = theme["ground_color"]
 
+	# Ensure ground width covers the whole race
+	_resize_ground()
+
 	var pstats := GameConfig.get_player_stats()
 	player.max_speed = pstats["max_speed"]
 	player.acceleration = pstats["acceleration"]
@@ -123,17 +126,95 @@ func _count_step(t: String) -> void:
 	await get_tree().create_timer(0.6).timeout
 
 func _spawn_level():
-	# Procedural pacing using theme spacing
-	var x := 420.0
-	while x < target_distance - 120.0:
-		var size := Vector2(50, 40)
-		_spawn_obstacle(Vector2(x, 480), size)
-		x += rng.randf_range(obstacle_spacing.x, obstacle_spacing.y)
+    # Pattern-based generation with simple difficulty ramp
+    var x := 420.0
+    while x < target_distance - 200.0:
+        var progress := clamp(x / target_distance, 0.0, 1.0)
+        var choice := rng.randf()
+        if choice < 0.35:
+            x = _pattern_hurdles(x, 3 + int(progress * 2.0))
+        elif choice < 0.65:
+            x = _pattern_cluster(x)
+        else:
+            x = _pattern_stairs(x)
 
-	x = 520.0
-	while x < target_distance - 200.0:
-		_spawn_pickup(Vector2(x, 430))
-		x += rng.randf_range(pickup_spacing.x, pickup_spacing.y)
+        # Mid/late-race: increase chance of a quick boost zone
+        if progress > 0.5 and rng.randf() < 0.25:
+            _spawn_boost_zone(x + 40.0, 160.0)
+
+        # Sprinkle stamina/boost pickups between patterns
+        if rng.randf() < (0.55 if progress > 0.6 else 0.35):
+            _spawn_pickup(Vector2(x + rng.randf_range(60.0, 140.0), 430))
+
+        # Advance by themed spacing with slight tightening later
+        var step_min := max(180.0, obstacle_spacing.x - 20.0 * progress)
+        var step_max := obstacle_spacing.y
+        x += rng.randf_range(step_min, step_max)
+
+    # Extra pickups near the end as a finale
+    var px := max(520.0, x - 400.0)
+    while px < target_distance - 100.0:
+        _spawn_pickup(Vector2(px, 430))
+        px += rng.randf_range(140.0, 220.0)
+
+func _resize_ground() -> void:
+    var col := get_node_or_null("Ground/CollisionShape2D") as CollisionShape2D
+    if col and col.shape and col.shape is RectangleShape2D:
+        var width := max(target_distance + 800.0, 4000.0)
+        var shape := col.shape as RectangleShape2D
+        shape.size = Vector2(width, shape.size.y)
+        var rect := get_node_or_null("Ground/ColorRect") as ColorRect
+        if rect:
+            rect.offset_left = -width * 0.5
+            rect.offset_right = width * 0.5
+
+func _pattern_cluster(x_start: float) -> float:
+    # 2-3 blocks close together
+    var count := 2 + int(rng.randf() < 0.5)
+    var x := x_start
+    for i in range(count):
+        var w := rng.randf_range(40.0, 60.0)
+        var h := rng.randf_range(36.0, 56.0)
+        _spawn_obstacle(Vector2(x, 480), Vector2(w, h))
+        x += rng.randf_range(40.0, 75.0)
+    return x
+
+func _pattern_stairs(x_start: float) -> float:
+    # Three rising hurdles
+    var x := x_start
+    var h := 32.0
+    for i in range(3):
+        _spawn_obstacle(Vector2(x, 480), Vector2(50, h))
+        x += rng.randf_range(70.0, 100.0)
+        h += rng.randf_range(8.0, 16.0)
+    return x
+
+func _pattern_hurdles(x_start: float, n: int) -> float:
+    # Sequence of small hurdles
+    var x := x_start
+    for i in range(n):
+        _spawn_obstacle(Vector2(x, 485), Vector2(42, 28))
+        x += rng.randf_range(65.0, 95.0)
+    return x
+
+func _spawn_boost_zone(x_center: float, width: float) -> void:
+    var area := Area2D.new()
+    area.global_position = Vector2(x_center, 500)
+    var shape := RectangleShape2D.new()
+    shape.size = Vector2(width, 20)
+    var col := CollisionShape2D.new()
+    col.shape = shape
+    area.add_child(col)
+    area.connect("body_entered", Callable(self, "_on_pickup_body_entered").bind(area))
+    area.set_meta("type", "boost_zone")
+    var rect := ColorRect.new()
+    rect.color = Color(0.2, 0.9, 0.8, 0.6)
+    rect.offset_left = -width * 0.5
+    rect.offset_right = width * 0.5
+    rect.offset_top = -10
+    rect.offset_bottom = 10
+    area.add_child(rect)
+    pickups_root.add_child(area)
 
 func _spawn_obstacle(pos: Vector2, size: Vector2):
 	var body := StaticBody2D.new()
@@ -197,17 +278,17 @@ func _create_finish_line(x: float):
 	add_child(finish_line)
 
 func _on_pickup_body_entered(body: Node, area: Area2D):
-	if body == player:
-		var ptype := String(area.get_meta("type")) if area.has_meta("type") else "stamina"
-		if ptype == "boost":
-			score += 150
-			if player.has_method("apply_boost"):
-				player.apply_boost(2.0)
-		else:
-			score += 100
-			player.stamina = min(player.stamina + 30.0, player.max_stamina)
-		if area and area.is_inside_tree():
-			area.queue_free()
+    if body == player:
+        var ptype := String(area.get_meta("type")) if area.has_meta("type") else "stamina"
+        if ptype == "boost" or ptype == "boost_zone":
+            score += 150
+            if player.has_method("apply_boost"):
+                player.apply_boost(1.6, 1.2)
+        else:
+            score += 100
+            player.stamina = min(player.stamina + 30.0, player.max_stamina)
+        if area and area.is_inside_tree():
+            area.queue_free()
 
 func _on_finish_body_entered(body: Node):
 	if game_over:
