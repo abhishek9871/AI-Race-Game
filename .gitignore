@@ -1,0 +1,26 @@
+# Godot-specific ignores
+.import/
+export.cfg
+export_presets.cfg.bak
+
+# Godot 4+ specific ignores
+.godot/
+
+# Build output
+web-build/
+*.zip
+
+# OS/Editor files
+.DS_Store
+*.swp
+*.kate-swp
+*.swo
+*.bak
+~*
+Thumbs.db
+.vscode/
+.idea/
+
+# Cloudflare
+.wrangler/
+node_modules/
